@@ -79,6 +79,20 @@ bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
   --device cuda:0 --port 8000
 ```
 
+```
+DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
+bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
+    --ckpt-path /path/to/full_weights.pt \
+    --metadata-json-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000/experiment_cfg/metadata.json \
+    --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
+    --diffusion-model-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.2-TI2V-5B \
+    --image-encoder-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.1-I2V-14B-480P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth \
+    --text-encoder-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.2-TI2V-5B/models_t5_umt5-xxl-enc-bf16.pth \
+    --vae-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.2-TI2V-5B/Wan2.2_VAE.pth \
+    --device cuda:0 \
+    --port 8000
+```
+
 Wait for `Model ready.` / `Listening on ws://0.0.0.0:8000`.
 
 > If the HF cache doesn't contain the Wan2.2 / CLIP / UMT5 / VAE components, pass absolute
