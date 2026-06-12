@@ -52,12 +52,19 @@ training and the built-in `libero_spatial_eval_dreamzero` eval.
 
 1. Install the DreamZero env: `bash requirements/install.sh embodied --model dreamzero --env libero`.
 2. A local **LIBERO** repo (the `libero` package, with `robosuite`) for the client.
-3. The trained checkpoint `full_weights.pt` and the **same `metadata.json` used in SFT**
-   (q99 normalization stats). For the open weights, download:
+3. Trained weights + the **same `metadata.json` used in SFT** (q99 normalization stats).
+   Two supported weight formats:
+   - **Checkpoint directory** (`model.safetensors[.index.json]` + `config.json` +
+     `experiment_cfg/`) — this is what the open weights ship as. Pass it via `--model-path`.
+   - **`full_weights.pt`** (a single RLinf state dict) — pass it via `--ckpt-path`.
+
+   For the open weights, download the directory:
    ```bash
    huggingface-cli download RLinf/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
      --local-dir /path/to/dreamzero_sft_ckpt
    ```
+   The downloaded dir already contains `experiment_cfg/metadata.json`, so you can point
+   `--metadata-json-path` at it (or omit it and let `--model-path` find it).
    Generate `metadata.json` (if you don't already have it) with:
    ```bash
    python toolkits/lerobot/generate_dreamzero_metadata.py \
@@ -71,33 +78,42 @@ separate machines (point the client at `--host/--port`). Run them in two termina
 
 ### 1. Start the server (GPU)
 
+**Recommended — load the open-weights checkpoint directory via `--model-path`** (the dir
+holds the full `model.safetensors` shards, so the Wan2.2/CLIP/UMT5/VAE component paths are
+*not* needed):
+
+```bash
+
+  CKPT_DIR=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000
+
+  DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
+  bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
+      --model-path "${CKPT_DIR}" \
+      --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
+      --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
+      --device cuda:0 --port 8000
+```
+
+`--tokenizer-path` is still required (the UMT5 tokenizer is used to tokenize the language
+instruction at inference). Everything else comes from the checkpoint.
+
+**Alternative — overlay an RLinf `full_weights.pt`** (built from component weights, so the
+Wan component paths ARE needed):
+
 ```bash
 DREAMZERO_PATH=/path/to/DreamZero \
 bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
-  --ckpt-path /path/to/dreamzero_sft_ckpt/.../full_weights.pt \
+  --ckpt-path /path/to/global_step_18000/actor/model_state_dict/full_weights.pt \
   --metadata-json-path /path/to/metadata.json \
+  --tokenizer-path /path/to/umt5-xxl \
+  --diffusion-model-pretrained-path /path/to/Wan2.2-TI2V-5B \
+  --image-encoder-pretrained-path /path/to/Wan2.1-I2V-14B-480P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth \
+  --text-encoder-pretrained-path /path/to/Wan2.2-TI2V-5B/models_t5_umt5-xxl-enc-bf16.pth \
+  --vae-pretrained-path /path/to/Wan2.2-TI2V-5B/Wan2.2_VAE.pth \
   --device cuda:0 --port 8000
 ```
 
-```
-DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
-bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
-    --ckpt-path /path/to/full_weights.pt \
-    --metadata-json-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000/experiment_cfg/metadata.json \
-    --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
-    --diffusion-model-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.2-TI2V-5B \
-    --image-encoder-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.1-I2V-14B-480P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth \
-    --text-encoder-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.2-TI2V-5B/models_t5_umt5-xxl-enc-bf16.pth \
-    --vae-pretrained-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/Wan2.2-TI2V-5B/Wan2.2_VAE.pth \
-    --device cuda:0 \
-    --port 8000
-```
-
 Wait for `Model ready.` / `Listening on ws://0.0.0.0:8000`.
-
-> If the HF cache doesn't contain the Wan2.2 / CLIP / UMT5 / VAE components, pass absolute
-> paths via `--diffusion-model-pretrained-path`, `--image-encoder-pretrained-path`,
-> `--text-encoder-pretrained-path`, `--vae-pretrained-path`, `--tokenizer-path`.
 
 ### 2. Run the client (LIBERO sim)
 

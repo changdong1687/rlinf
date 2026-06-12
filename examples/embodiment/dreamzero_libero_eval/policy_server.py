@@ -207,17 +207,33 @@ def _build_model(args: argparse.Namespace, device: torch.device):
             model_cfg.text_encoder_pretrained_path = args.text_encoder_pretrained_path
         if args.vae_pretrained_path is not None:
             model_cfg.vae_pretrained_path = args.vae_pretrained_path
-        # Eval builds from component weights, then overlays --ckpt-path; never a full dir.
-        model_cfg.model_path = None
+        # Two ways to provide trained weights:
+        #   --model-path DIR : a full DreamZero checkpoint dir (model.safetensors[.index.json]
+        #                      + config.json + experiment_cfg/). get_model loads it natively
+        #                      and skips Wan component loading (full weights already include them).
+        #   --ckpt-path .pt  : an RLinf full_weights.pt state dict, overlaid after get_model.
+        model_cfg.model_path = args.model_path if args.model_path else None
+
+    if args.model_path and args.ckpt_path:
+        logger.warning(
+            "Both --model-path and --ckpt-path given; --model-path loads the full "
+            "safetensors and --ckpt-path will overlay on top of it."
+        )
 
     precision = str(model_cfg.get("precision", "bf16"))
     torch_dtype = _PRECISION_TO_DTYPE.get(precision, torch.bfloat16)
 
-    logger.info("Building DreamZero model (precision=%s, dtype=%s)", precision, torch_dtype)
+    logger.info(
+        "Building DreamZero model (precision=%s, dtype=%s, model_path=%s)",
+        precision,
+        torch_dtype,
+        model_cfg.model_path,
+    )
+    # When model_path is set, get_model loads the full safetensors shards from that dir.
     model = get_model(model_cfg, torch_dtype=torch_dtype)
 
     if args.ckpt_path:
-        logger.info("Loading trained checkpoint: %s", args.ckpt_path)
+        logger.info("Overlaying trained checkpoint: %s", args.ckpt_path)
         state_dict = torch.load(args.ckpt_path, map_location="cpu")
         if isinstance(state_dict, dict) and "state_dict" in state_dict:
             state_dict = state_dict["state_dict"]
@@ -228,10 +244,10 @@ def _build_model(args: argparse.Namespace, device: torch.device):
             logger.warning(
                 "load_state_dict unexpected keys: %d (e.g. %s)", len(unexpected), unexpected[:5]
             )
-    else:
+    elif not args.model_path:
         logger.warning(
-            "No --ckpt-path given: serving component-initialized weights only "
-            "(untrained action head). Results will be meaningless."
+            "Neither --model-path nor --ckpt-path given: serving component-initialized "
+            "weights only (untrained action head). Results will be meaningless."
         )
 
     model.eval()
@@ -249,10 +265,23 @@ def parse_args() -> argparse.Namespace:
         help="Standalone actor.model YAML. Defaults to config/dreamzero_5b_libero.yaml next to this script.",
     )
     parser.add_argument(
+        "--model-path",
+        type=str,
+        default=None,
+        help=(
+            "Full DreamZero checkpoint DIRECTORY (model.safetensors[.index.json] + config.json "
+            "+ experiment_cfg/), e.g. the open RLinf-DreamZero-...-SFT-Step18000 download. "
+            "Loaded natively by get_model; Wan component paths are not needed in this mode."
+        ),
+    )
+    parser.add_argument(
         "--ckpt-path",
         type=str,
         default=None,
-        help="Trained DreamZero checkpoint (.pt full_weights). If omitted, only component weights are used.",
+        help=(
+            "RLinf full_weights.pt state dict (alternative to --model-path). Overlaid on top "
+            "of the built model. If both are omitted, only component weights are used."
+        ),
     )
     parser.add_argument(
         "--metadata-json-path",
