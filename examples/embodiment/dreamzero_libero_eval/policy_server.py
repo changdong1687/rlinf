@@ -157,6 +157,7 @@ class PicklePolicyServer:
             self._port,
             compression=None,
             max_size=None,
+            ping_interval=None,
         ) as server:
             await server.serve_forever()
 
@@ -168,10 +169,10 @@ class PicklePolicyServer:
                 payload = pickle.loads(await websocket.recv())
                 endpoint = payload.pop("endpoint")
                 if endpoint == "reset":
-                    self._policy.reset(payload)
+                    await asyncio.to_thread(self._policy.reset, payload)
                     await websocket.send(pickle.dumps({"status": "reset successful"}))
                 elif endpoint == "infer":
-                    action = self._policy.infer(payload)
+                    action = await asyncio.to_thread(self._policy.infer, payload)
                     await websocket.send(pickle.dumps(action))
                 else:
                     raise ValueError(f"Unsupported endpoint: {endpoint}")

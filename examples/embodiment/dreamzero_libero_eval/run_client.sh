@@ -16,9 +16,9 @@ export REPO_PATH=$(dirname $(dirname $(dirname "$EVAL_DIR")))
 export LIBERO_ROOT=${LIBERO_ROOT:-"$(dirname "$REPO_PATH")/LIBERO"}
 export PYTHONPATH=${REPO_PATH}:${LIBERO_ROOT}:$PYTHONPATH
 
-# osmesa is the safest offscreen backend for the simulator client.
-export MUJOCO_GL=${MUJOCO_GL:-"osmesa"}
-export PYOPENGL_PLATFORM=${PYOPENGL_PLATFORM:-"osmesa"}
+# egl is the safest offscreen backend for the simulator client.
+export MUJOCO_GL=${MUJOCO_GL:-"egl"}
+export PYOPENGL_PLATFORM=${PYOPENGL_PLATFORM:-"egl"}
 
 echo "Using Python at $(which python)"
 echo "LIBERO_ROOT=${LIBERO_ROOT}"

@@ -58,8 +58,7 @@ class PickleWebsocketClient:
             self._uri,
             compression=None,
             max_size=None,
-            ping_interval=60,
-            ping_timeout=600,
+            ping_interval=None,
         )
         self._metadata = pickle.loads(self._ws.recv())
 
@@ -255,6 +254,8 @@ def main() -> None:
         "tasks": [],
         "mean_success_rate": 0.0,
     }
+
+    episode_idx = 0
 
     task_progress = tqdm(task_ids, desc="Tasks", unit="task")
     for task_id in task_progress:
