@@ -45,6 +45,7 @@ training and the built-in `libero_spatial_eval_dreamzero` eval.
 | `layer_skip.py` | Pure-Python DiT layer-skip helpers (used by `--layer-skip`; no torch import). |
 | `tests/test_eval_client.py` | Offline unit tests for the client's chunk-execution logic (numpy-only, no GPU/sim). |
 | `tests/test_layer_skip.py` | Offline unit tests for the layer-skip logic (numpy-only, no GPU/sim). |
+| `analysis/` | DreamZero inference analysis: token-token cossim + attention maps (see "Inference analysis" below). |
 
 > **Drift note:** `config/dreamzero_5b_libero.yaml` is a hand-synced snapshot of
 > `examples/embodiment/config/model/dreamzero_5b.yaml`. If the upstream model config
@@ -258,6 +259,62 @@ reference — it should land near the `≈96.68%` above.
   ```bash
   python examples/embodiment/dreamzero_libero_eval/tests/test_layer_skip.py
   ```
+
+## Inference analysis (cossim + attention maps)
+
+`analysis/` instruments DreamZero's diffusion inference on a single LIBERO-Spatial task to
+find redundancy for acceleration. Per **(chunk, diffusion-timestep, layer)** it captures:
+
+1. **Three token-token cosine similarities** — pairwise mean cossim among video tokens
+   `[n_vid, d]`, among action tokens `[n_act, d]`, and combined `[n_vid+n_act, d]`. High
+   similarity ⇒ redundant tokens/layers.
+2. **Attention maps** — one PDF per **(chunk, layer)**, one **page per diffusion timestep**,
+   all heads of that layer on a page. The last layer's PDF holds all timesteps. AR maps are
+   kept at their real (possibly non-square) `[Lq, Lk]` shape.
+
+It reuses the eval model-loading and observation preprocessing (`policy_server._build_model`,
+`LiberoRLinfPolicy._build_env_obs`), so it runs on the exact same inference path. Capture is
+done with runtime hooks (`analysis/capture.py`) — **no groot edits** — and `torch.compile` is
+disabled (`TORCHDYNAMO_DISABLE=1`) so intermediate tensors are visible.
+
+> How it works: during AR inference each layer makes a single `AttentionModule.forward(q,k,v)`
+> call per timestep; we wrap it to recompute `softmax(q·kᵀ/√d)` per head. Hidden states are
+> grabbed via a forward hook on each `CausalWanAttentionBlock`; diffusion timesteps are counted
+> by a pre-hook on block 0.
+
+### Run
+
+```bash
+MODEL_PATH=/path/to/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
+METADATA_JSON_PATH=$MODEL_PATH/experiment_cfg/metadata.json \
+TOKENIZER_PATH=/path/to/umt5-xxl \
+DREAMZERO_PATH=/path/to/DreamZero \
+LIBERO_ROOT=/path/to/LIBERO \
+bash examples/embodiment/dreamzero_libero_eval/analysis/run_analysis.sh \
+    --task-id 0 --max-chunks 1 --output-dir ./runs/analysis_task0
+```
+
+Outputs under `--output-dir`:
+- `cossim_{vid,act,comb}.png` — per-group mean cossim across layers (one line per timestep)
+- `cossim.npz` / `cossim.csv` — raw per (chunk, timestep, layer) values
+- `attention/chunk{c}_layer{L}.pdf` — attention maps (page per timestep, heads grid)
+
+### Key flags
+
+| Flag | Default | Notes |
+| --- | --- | --- |
+| `--task-id` / `--episode-index` | 0 / 0 | Which LIBERO task and init state. |
+| `--max-chunks` | 1 | How many policy predictions (chunks) to capture. **Start at 1** — full episode × 30 layers × heads is a lot of PDFs. |
+| `--layers` | all | Restrict attention capture, e.g. `0,15,29` or `0-29`. |
+| `--no-attn` / `--no-cossim` | off | Capture only one of the two. |
+
+> **Volume warning:** every chunk × 30 layers produces a PDF; with all chunks of an episode
+> this is hundreds of files. Use `--max-chunks` / `--layers` to bound it.
+
+Offline tests (cossim math + PDF builder; needs numpy + matplotlib, no GPU/sim):
+```bash
+python examples/embodiment/dreamzero_libero_eval/analysis/tests/test_capture.py
+```
 
 ## Expected results
 
