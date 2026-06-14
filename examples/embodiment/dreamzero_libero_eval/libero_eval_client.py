@@ -202,6 +202,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--task-ids", type=int, nargs="*", default=None, help="Optional task ids to evaluate.")
     parser.add_argument("--n-eval", type=int, default=20, help="Episodes per task.")
     parser.add_argument("--max-steps", type=int, default=480, help="Maximum rollout length (matches RLinf libero eval).")
+    parser.add_argument(
+        "--num-settle-steps",
+        type=int,
+        default=15,
+        help="Zero-action (gripper open) steps after set_init_state, before the policy "
+        "starts. MUST match RLinf LiberoEnv.reset (15). Lower values start the policy on "
+        "an unsettled, out-of-distribution scene and reduce success.",
+    )
     parser.add_argument("--camera-height", type=int, default=256, help="Render camera height (RLinf trains at 256).")
     parser.add_argument("--camera-width", type=int, default=256, help="Render camera width (RLinf trains at 256).")
     parser.add_argument(
@@ -249,6 +257,7 @@ def main() -> None:
         "n_eval": args.n_eval,
         "max_steps": args.max_steps,
         "open_loop_horizon": open_loop_horizon,
+        "num_settle_steps": args.num_settle_steps,
         "checkpoint_path": str(args.checkpoint_path.resolve()) if args.checkpoint_path is not None else None,
         "server_metadata": client.client.metadata,
         "tasks": [],
@@ -289,10 +298,15 @@ def main() -> None:
                 init_state = init_state.cpu().numpy()
             obs = env.set_init_state(init_state)
 
-            # Let the scene settle (matches reference eval).
-            dummy_action = np.zeros(7, dtype=np.float32)
-            for _ in range(5):
-                obs, _, _, _ = env.step(dummy_action)
+            # Let the scene settle BEFORE the policy starts. This must match RLinf's
+            # LiberoEnv.reset (rlinf/envs/libero/libero_env.py): it steps the env
+            # `num_settle_steps` times with a zero action whose gripper dim is -1 (open).
+            # Mismatching this (e.g. 5 steps / gripper 0) starts the policy on an
+            # unsettled, out-of-distribution observation and lowers success.
+            settle_action = np.zeros(7, dtype=np.float32)
+            settle_action[-1] = -1.0  # gripper open, matches reset_gripper_open=True
+            for _ in range(args.num_settle_steps):
+                obs, _, _, _ = env.step(settle_action)
 
             success = False
             steps = 0
