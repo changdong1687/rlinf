@@ -199,12 +199,13 @@ for that run.
 `run_server.sh` forwards all extra flags to `policy_server.py`:
 
 ```bash
-CKPT_DIR=/path/to/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000
-DREAMZERO_PATH=/path/to/DreamZero \
+  CKPT_DIR=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000
+
+  DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
 bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
     --model-path "${CKPT_DIR}" \
     --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-    --tokenizer-path /path/to/umt5-xxl \
+    --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
     --layer-skip "10-19" \
     --device cuda:0 --port 8000
 ```
