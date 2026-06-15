@@ -221,7 +221,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("./runs/libero_eval"), help="Directory for JSON/CSV results.")
     parser.add_argument("--checkpoint-path", type=Path, default=None, help="Optional checkpoint path recorded in results.json.")
     parser.add_argument("--save-video", action="store_true", help="Save rollout videos for the first few episodes per task.")
-    parser.add_argument("--video-episodes-per-task", type=int, default=1, help="Episodes per task to save when --save-video.")
+    parser.add_argument("--video-episodes-per-task", type=int, default=-1, help="Episodes per task to save when --save-video. <=0 means save ALL episodes (default).")
     parser.add_argument("--seed", type=int, default=0, help="Numpy seed for reproducibility.")
     return parser.parse_args()
 
@@ -310,7 +310,10 @@ def main() -> None:
 
             success = False
             steps = 0
-            save_video = args.save_video and episode_idx < args.video_episodes_per_task
+            save_video = args.save_video and (
+                args.video_episodes_per_task <= 0
+                or episode_idx < args.video_episodes_per_task
+            )
             video_frames = [make_rollout_frame(obs)] if save_video else []
 
             rollout_progress = tqdm(total=args.max_steps, desc=f"Task {task_id} Ep {episode_idx}", unit="step", leave=False)
