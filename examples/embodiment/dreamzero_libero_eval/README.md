@@ -123,7 +123,7 @@ Wait for `Model ready.` / `Listening on ws://0.0.0.0:8000`.
 Smoke test (1 task, 2 episodes, save a video):
 
 ```bash
-LIBERO_ROOT=/path/to/LIBERO \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
 bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
   --benchmark-name libero_spatial --task-ids 0 --n-eval 2 --save-video \
   --output-dir ./runs/libero_spatial_smoke
@@ -132,7 +132,7 @@ bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
 Full LIBERO-Spatial sweep:
 
 ```bash
-LIBERO_ROOT=/path/to/LIBERO \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
 bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
   --benchmark-name libero_spatial --n-eval 50 \
   --output-dir ./runs/libero_spatial_step18000
@@ -150,7 +150,7 @@ Instead of two terminals, `run_eval.sh` starts the server, waits until it is lis
 CKPT_PATH=/path/to/full_weights.pt \
 METADATA_JSON_PATH=/path/to/metadata.json \
 DREAMZERO_PATH=/path/to/DreamZero \
-LIBERO_ROOT=/path/to/LIBERO \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
 bash examples/embodiment/dreamzero_libero_eval/run_eval.sh \
   --benchmark-name libero_spatial --n-eval 20 --save-video
 ```
@@ -222,13 +222,13 @@ Model ready. ... num_layers=30 layer_skip=[10,11,12,13,14,15,16,17,18,19]
 
 ```bash
 # quick smoke test first
-LIBERO_ROOT=/path/to/LIBERO \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
 bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
   --benchmark-name libero_spatial --task-ids 0 --n-eval 2 \
   --output-dir ./runs/skip_10-19_smoke
 
 # full sweep
-LIBERO_ROOT=/path/to/LIBERO \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
 bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
   --benchmark-name libero_spatial --n-eval 50 \
   --output-dir ./runs/skip_10-19
@@ -289,7 +289,7 @@ MODEL_PATH=/path/to/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
 METADATA_JSON_PATH=$MODEL_PATH/experiment_cfg/metadata.json \
 TOKENIZER_PATH=/path/to/umt5-xxl \
 DREAMZERO_PATH=/path/to/DreamZero \
-LIBERO_ROOT=/path/to/LIBERO \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
 bash examples/embodiment/dreamzero_libero_eval/analysis/run_analysis.sh \
     --task-id 0 --max-chunks 1 --output-dir ./runs/analysis_task0
 ```

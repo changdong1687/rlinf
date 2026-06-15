@@ -11,12 +11,12 @@ No groot edits; runtime hooks only; `torch.compile` disabled so tensors are visi
 ## Run
 
 ```bash
-MODEL_PATH=/path/to/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
+MODEL_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
 METADATA_JSON_PATH=$MODEL_PATH/experiment_cfg/metadata.json \
-TOKENIZER_PATH=/path/to/umt5-xxl \
-DREAMZERO_PATH=/path/to/DreamZero \
-LIBERO_ROOT=/path/to/LIBERO \
-bash run_analysis.sh --task-id 0 --max-chunks 1 --output-dir ./runs/analysis_task0
+TOKENIZER_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
+DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
+bash examples/embodiment/dreamzero_libero_eval/analysis/run_analysis.sh --task-id 0 --max-chunks 1 --output-dir ./runs/analysis_task0
 ```
 
 Weights: use `MODEL_PATH` (safetensors dir) **or** `CKPT_PATH` (a `full_weights.pt`).
