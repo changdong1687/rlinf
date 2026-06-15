@@ -42,9 +42,7 @@ training and the built-in `libero_spatial_eval_dreamzero` eval.
 | `libero_eval_client.py` | Runs LIBERO rollouts, executes returned chunks, writes `results.json` / `results.csv` (+ optional videos). |
 | `run_server.sh` / `run_client.sh` | Convenience launchers (set env vars + paths). |
 | `run_eval.sh` | One-shot: starts the server in the background, waits for it, runs the client, stops the server. |
-| `layer_skip.py` | Pure-Python DiT layer-skip helpers (used by `--layer-skip`; no torch import). |
 | `tests/test_eval_client.py` | Offline unit tests for the client's chunk-execution logic (numpy-only, no GPU/sim). |
-| `tests/test_layer_skip.py` | Offline unit tests for the layer-skip logic (numpy-only, no GPU/sim). |
 | `analysis/` | DreamZero inference analysis: token-token cossim + attention maps (see "Inference analysis" below). |
 
 > **Drift note:** `config/dreamzero_5b_libero.yaml` is a hand-synced snapshot of
@@ -179,86 +177,6 @@ python examples/embodiment/dreamzero_libero_eval/tests/test_eval_client.py
 | `--camera-height/--camera-width` | 256 | RLinf trains/evals at 256. |
 | `--open-loop-horizon` | -1 | `<=0` → execute the full 16-step chunk before re-querying (RLinf eval behavior). Set e.g. `8` for tighter closed loop. |
 | `--save-video` | off | Save the first `--video-episodes-per-task` rollouts per task. |
-
-## Layer skip (DiT ablation)
-
-You can ablate the DreamZero diffusion transformer by **skipping whole DiT blocks** at
-inference and measuring the effect on LIBERO-Spatial — without touching the groot source
-or the RLinf core. The server flag `--layer-skip` replaces the selected blocks' `forward`
-with an identity (residual + kv-cache passthrough), so they are removed from the network
-for that run.
-
-- Implementation lives entirely in this folder: `layer_skip.py` (pure-Python skip logic)
-  and `policy_server.py` (the `--layer-skip` flag). `get_model` and groot are untouched.
-- The DiT has **30 blocks**, so valid indices are `[0, 30)`.
-- Spec syntax: comma list `3,7,11`, inclusive range `10-19`, or mixed `0,5,12-15`.
-- The skip config is written into `results.json` (`server_metadata.layer_skip` /
-  `num_layers`), so runs never get confused.
-
-### 1. Start the server with `--layer-skip`
-
-`run_server.sh` forwards all extra flags to `policy_server.py`:
-
-```bash
-  CKPT_DIR=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000
-
-  DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
-bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
-    --model-path "${CKPT_DIR}" \
-    --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-    --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
-    --layer-skip "10-19" \
-    --device cuda:0 --port 8000
-```
-
-Confirm it took effect in the server log:
-
-```
-LAYER SKIP active: skipping 10/30 DiT blocks -> [10, 11, ..., 19] (active layers: 20)
-Model ready. ... num_layers=30 layer_skip=[10,11,12,13,14,15,16,17,18,19]
-```
-
-### 2. Run the client
-
-```bash
-# quick smoke test first
-LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
-bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
-  --benchmark-name libero_spatial --task-ids 0 --n-eval 2 \
-  --output-dir ./runs/skip_10-19_smoke
-
-# full sweep
-LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \
-bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
-  --benchmark-name libero_spatial --n-eval 50 \
-  --output-dir ./runs/skip_10-19
-```
-
-### 3. Compare against the no-skip baseline
-
-```bash
-python -c "import json; d=json.load(open('runs/skip_10-19/results.json')); \
-print('layer_skip =', d['server_metadata']['layer_skip']); \
-print('mean_success_rate =', d['mean_success_rate'])"
-```
-
-Run a baseline once (omit `--layer-skip`, use `--output-dir ./runs/baseline`) for
-reference — it should land near the `≈96.68%` above.
-
-### Notes
-
-- **Restart the server every time you change `--layer-skip`** (or to run the baseline):
-  Python does not hot-reload and torch.compile caches the graphs.
-- Start by skipping a few middle blocks (e.g. `12-15`) and increase gradually; skipping
-  too many layers drops success sharply.
-- This is an inference-only ablation (no fine-tuning). To make layer skip apply to
-  **training** as well, it would need to move into `get_model` via the Patcher (see the
-  trade-offs discussed in the project notes); the current design is intentionally
-  eval-only and self-contained.
-- The skip logic is covered by offline unit tests (numpy-only, no GPU/sim):
-  ```bash
-  python examples/embodiment/dreamzero_libero_eval/tests/test_layer_skip.py
-  ```
 
 ## Inference analysis (cossim + attention maps)
 
