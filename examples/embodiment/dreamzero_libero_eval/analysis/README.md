@@ -11,7 +11,7 @@ No groot edits; runtime hooks only; `torch.compile` disabled so tensors are visi
 ## Run
 
 ```bash
-MODEL_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
+MODEL_PATH=/root/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
 METADATA_JSON_PATH=$MODEL_PATH/experiment_cfg/metadata.json \
 TOKENIZER_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
 DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
