@@ -1,0 +1,61 @@
+
+========== 1. Filesystems: capacity / free / type (df -hT) ==========
+Filesystem     Type     Size  Used Avail Use% Mounted on
+overlay        overlay  3.5T  2.2T  1.4T  63% /
+tmpfs          tmpfs     64M     0   64M   0% /dev
+gpfs_hdd       gpfs      11P  158T   11P   2% /ssh_logs
+tmpfs          tmpfs    100G     0  100G   0% /dev/shm
+/dev/sda2      ext4     439G   83G  335G  20% /etc/hosts
+/dev/nvme0n1   xfs      3.5T  2.2T  1.4T  63% /etc/hostname
+gpfs_flash     gpfs     1.0T  802G  223G  79% /inspire/ssd/project/realtimedecisionmaking/public
+tmpfs          tmpfs    100G   12K  100G   1% /run/secrets/kubernetes.io/serviceaccount
+tmpfs          tmpfs    504G   12K  504G   1% /proc/driver/nvidia
+tmpfs          tmpfs    504G  4.0K  504G   1% /etc/nvidia/nvidia-application-profiles-rc.d
+tmpfs          tmpfs    101G   79M  101G   1% /run/nvidia-persistenced/socket
+tmpfs          tmpfs    504G     0  504G   0% /proc/asound
+tmpfs          tmpfs    504G     0  504G   0% /proc/acpi
+tmpfs          tmpfs    504G     0  504G   0% /proc/scsi
+tmpfs          tmpfs    504G     0  504G   0% /sys/firmware
+
+========== 2. Disks: SSD/NVMe vs HDD  (ROTA=0 -> SSD/NVMe, ROTA=1 -> HDD) ==========
+NAME    ROTA   SIZE TYPE MODEL                                    MOUNTPOINT
+loop0      0     4K loop                                          
+loop1      0  66.8M loop                                          
+loop2      0  66.8M loop                                          
+loop3      0   580K loop                                          
+loop4      0    74M loop                                          
+loop5      0  63.8M loop                                          
+loop7      0 349.7M loop                                          
+loop8      0 248.8M loop                                          
+loop9      0 516.2M loop                                          
+loop10     0 531.4M loop                                          
+loop11     0  81.3M loop                                          
+loop12     0  91.7M loop                                          
+loop13     0  45.9M loop                                          
+loop14     0  12.2M loop                                          
+loop15     0  48.4M loop                                          
+loop16     0  63.8M loop                                          
+loop17     0 248.4M loop                                          
+loop18     0  49.3M loop                                          
+loop19     0    74M loop                                          
+loop20     0   580K loop                                          
+loop21     0 606.1M loop                                          
+loop22     0   395M loop                                          
+loop23     0 248.6M loop                                          
+sda        0 447.1G disk HFS480G3H2X069N                          
+nvme0n1    0   3.5T disk SAMSUNG MZQL23T8HCLS-00B7C               /etc/resolv.conf
+nvme1n1    0   3.5T disk SAMSUNG MZQL23T8HCLS-00B7C               
+
+========== 3. Candidate fast local dirs (free space) ==========
+  /dev/shm -> tmpfs          tmpfs  100G     0  100G   0% /dev/shm
+  /tmp -> overlay        overlay  3.5T  2.2T  1.4T  63% /
+  /root -> overlay        overlay  3.5T  2.2T  1.4T  63% /
+
+  Note: /dev/shm is tmpfs (RAM-backed, fastest, but volatile and uses memory).
+
+========== 4. Paths you passed (size + which disk) ==========
+  (none — pass paths as args to also see 'du -sh' + the disk they live on)
+
+========== Done ==========
+Tip: stage ckpts on a dir that is (a) ROTA=0 / SSD-NVMe and (b) has enough Avail,
+     then point MODEL_PATH / TOKENIZER_PATH there. /dev/shm is fastest if RAM allows.
