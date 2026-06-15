@@ -193,6 +193,49 @@ class PicklePolicyServer:
                 raise
 
 
+import contextlib
+
+
+# Frozen Wan components (text encoder / CLIP / VAE) are loaded unconditionally inside
+# groot's WANPolicyHead.__init__ via torch.load(...). When a full --model-path checkpoint
+# is used, those same weights are present in the safetensors and get overwritten right
+# after by model.load_state_dict(...), so the .pth loads are pure wasted I/O (the UMT5-xxl
+# text encoder alone is ~10GB). These substrings identify those component files.
+_FROZEN_COMPONENT_MARKERS = ("umt5", "open-clip", "vae")
+
+
+@contextlib.contextmanager
+def _skip_frozen_component_loads():
+    """Make torch.load return {} for the frozen-component .pth files during construction.
+
+    nn.Module.load_state_dict is temporarily made a no-op for empty dicts so the skipped
+    components keep their (random) init — which is then fully overwritten by the full
+    safetensors. Net effect: identical final weights, minus ~10GB+ of redundant reads.
+    """
+    orig_torch_load = torch.load
+    orig_load_sd = torch.nn.Module.load_state_dict
+
+    def _patched_load(f, *a, **k):
+        name = str(f).lower()
+        if name.endswith(".pth") and any(m in name for m in _FROZEN_COMPONENT_MARKERS):
+            logger.info("skip-frozen-component-load: skipping %s (provided by full safetensors)", f)
+            return {}
+        return orig_torch_load(f, *a, **k)
+
+    def _patched_load_sd(self, state_dict, strict=True, *a, **k):
+        if isinstance(state_dict, dict) and len(state_dict) == 0:
+            return torch.nn.modules.module._IncompatibleKeys([], [])
+        return orig_load_sd(self, state_dict, strict=strict, *a, **k)
+
+    torch.load = _patched_load
+    torch.nn.Module.load_state_dict = _patched_load_sd
+    try:
+        yield
+    finally:
+        torch.load = orig_torch_load
+        torch.nn.Module.load_state_dict = orig_load_sd
+
+
 def _build_model(args: argparse.Namespace, device: torch.device):
     """Load actor.model config, build the DreamZero model, and overlay the checkpoint."""
     cfg = OmegaConf.load(args.config)
@@ -236,7 +279,15 @@ def _build_model(args: argparse.Namespace, device: torch.device):
         model_cfg.model_path,
     )
     # When model_path is set, get_model loads the full safetensors shards from that dir.
-    model = get_model(model_cfg, torch_dtype=torch_dtype)
+    skip_components = getattr(args, "skip_frozen_component_load", False) and bool(args.model_path)
+    if skip_components:
+        logger.warning(
+            "skip-frozen-component-load enabled: NOT reading the text/CLIP/VAE .pth files; "
+            "those weights come from the full --model-path safetensors instead (faster startup)."
+        )
+    cm = _skip_frozen_component_loads() if skip_components else contextlib.nullcontext()
+    with cm:
+        model = get_model(model_cfg, torch_dtype=torch_dtype)
 
     if args.ckpt_path:
         logger.info("Overlaying trained checkpoint: %s", args.ckpt_path)
@@ -301,6 +352,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device", type=str, default="cuda:0", help="Inference device.")
     parser.add_argument("--precision", type=str, default=None, help="Override model precision (e.g. bf16, fp32).")
+    parser.add_argument(
+        "--skip-frozen-component-load",
+        action="store_true",
+        help=(
+            "Speed up startup in --model-path mode: skip reading the text/CLIP/VAE .pth files "
+            "(~10GB+), since the full safetensors already contains and overwrites them. "
+            "Produces an identical model; verify once by comparing an inference action chunk."
+        ),
+    )
     parser.add_argument(
         "--layer-skip",
         type=str,
