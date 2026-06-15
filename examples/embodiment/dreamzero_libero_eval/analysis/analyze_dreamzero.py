@@ -173,6 +173,7 @@ def main() -> None:
     steps = 0
     chunk = 0
     n_attn_pdfs = 0
+    n_layersim_pdfs = 0
     while steps < args.max_steps and chunk < args.max_chunks:
         ctx.start_chunk()
         ctx.enabled = True
@@ -192,6 +193,8 @@ def main() -> None:
         )
         if ctx.want_attn:
             n_attn_pdfs += ctx.flush_chunk_attention(outdir)
+        if ctx.want_cossim:
+            n_layersim_pdfs += ctx.flush_chunk_layersim(outdir)
 
         for a in np.asarray(actions, dtype=np.float32):
             obs, _, _, _ = env.step(a)
@@ -204,16 +207,14 @@ def main() -> None:
             break
 
     env.close()
-    if ctx.want_cossim:
-        ctx.render_cossim(outdir)
     ctx.remove()
 
     print(
         f"[analyze] done. chunks={chunk} attention PDFs={n_attn_pdfs} "
-        f"cossim records={len(ctx.cossim_records)} -> {outdir}"
+        f"layer-similarity PDFs={n_layersim_pdfs} -> {outdir}"
     )
-    print(f"[analyze]   cossim curves: {outdir}/cossim_*.png ; raw: {outdir}/cossim.npz/.csv")
-    print(f"[analyze]   attention PDFs: {outdir}/attention/chunk*_layer*.pdf")
+    print(f"[analyze]   layer similarity: {outdir}/layer_similarity/chunk*.pdf (+ .npz)")
+    print(f"[analyze]   attention PDFs:   {outdir}/attention/chunk*_layer*.pdf")
 
 
 if __name__ == "__main__":

@@ -22,33 +22,58 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from capture import attention_grid_figure, mean_pairwise_cossim  # noqa: E402
+from capture import attention_grid_figure, layer_sim_page_figure, layer_similarity_matrix  # noqa: E402
 
 
-def test_cossim_identical_rows_is_one():
-    h = np.ones((5, 8), dtype=np.float32) * 3.0
-    assert abs(mean_pairwise_cossim(h) - 1.0) < 1e-6
+def test_layer_sim_diagonal_is_one():
+    # Each layer's flattened vector vs itself -> 1 on the diagonal.
+    vecs = [np.random.rand(12 * 8).astype(np.float32) for _ in range(5)]
+    m = layer_similarity_matrix(vecs)
+    assert m.shape == (5, 5)
+    assert np.allclose(np.diag(m), 1.0, atol=1e-6)
 
 
-def test_cossim_orthogonal_rows_is_zero():
-    h = np.eye(4, dtype=np.float32)  # rows are orthonormal -> pairwise cossim 0
-    assert abs(mean_pairwise_cossim(h)) < 1e-6
+def test_layer_sim_symmetric():
+    vecs = [np.random.rand(20).astype(np.float32) for _ in range(4)]
+    m = layer_similarity_matrix(vecs)
+    assert np.allclose(m, m.T, atol=1e-6)
 
 
-def test_cossim_opposite_rows_is_negative_one():
-    h = np.array([[1.0, 0.0], [-1.0, 0.0]], dtype=np.float32)
-    assert abs(mean_pairwise_cossim(h) - (-1.0)) < 1e-6
+def test_layer_sim_identical_layers_all_ones():
+    v = np.random.rand(30).astype(np.float32)
+    m = layer_similarity_matrix([v, v.copy(), v.copy()])
+    assert np.allclose(m, 1.0, atol=1e-6)
 
 
-def test_cossim_matches_manual_value():
-    h = np.array([[1.0, 0.0], [1.0, 1.0]], dtype=np.float32)  # cossim = 1/sqrt(2)
-    assert abs(mean_pairwise_cossim(h) - (1.0 / np.sqrt(2))) < 1e-6
+def test_layer_sim_opposite_is_negative_one():
+    v = np.random.rand(16).astype(np.float32)
+    m = layer_similarity_matrix([v, -v])
+    assert abs(m[0, 1] - (-1.0)) < 1e-6
 
 
-def test_cossim_single_row_is_nan():
-    import math
+def test_layer_sim_matches_flatten_cosine():
+    # Matches F.cosine_similarity on the flattened [n_tok, d] tensors.
+    a = np.random.rand(4, 8).astype(np.float64)
+    b = np.random.rand(4, 8).astype(np.float64)
+    m = layer_similarity_matrix([a.reshape(-1), b.reshape(-1)])
+    af, bf = a.reshape(-1), b.reshape(-1)
+    expected = float(af @ bf / (np.linalg.norm(af) * np.linalg.norm(bf)))
+    assert abs(m[0, 1] - expected) < 1e-9
 
-    assert math.isnan(mean_pairwise_cossim(np.zeros((1, 8))))
+
+def test_layer_sim_page_figure_three_panels():
+    import matplotlib.pyplot as plt
+
+    n = 6
+    mats = {
+        "video tokens": np.random.rand(n, n).astype(np.float32),
+        "action tokens": np.random.rand(n, n).astype(np.float32),
+        "hidden states": np.random.rand(n, n).astype(np.float32),
+    }
+    fig = layer_sim_page_figure(mats, "chunk 0 | timestep 0")
+    n_imgs = sum(len(ax.images) > 0 for ax in fig.axes)
+    assert n_imgs == 3, n_imgs
+    plt.close(fig)
 
 
 def test_attention_grid_figure_shape_and_save():

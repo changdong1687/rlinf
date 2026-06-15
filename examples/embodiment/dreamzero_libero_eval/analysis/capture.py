@@ -51,21 +51,18 @@ except Exception:  # pragma: no cover - offline tests stub this out
 # --------------------------------------------------------------------------------------
 # Pure helpers (unit-tested offline)
 # --------------------------------------------------------------------------------------
-def mean_pairwise_cossim(h: np.ndarray) -> float:
-    """Mean off-diagonal cosine similarity among rows of ``h`` ``[N, d]``.
+def layer_similarity_matrix(vectors: list[np.ndarray]) -> np.ndarray:
+    """Layer-to-layer cosine similarity ``[N, N]`` from per-layer flattened vectors.
 
-    Returns NaN when there are fewer than 2 rows.
+    ``vectors[i]`` is layer i's token group flattened to 1-D (e.g. ``vid_i.flatten()``).
+    ``M[i, j] = cos(vectors[i], vectors[j])`` — exactly ``F.cosine_similarity`` on the two
+    flattened vectors. All vectors must share the same length.
     """
-    h = np.asarray(h, dtype=np.float64)
-    n = h.shape[0]
-    if n < 2:
-        return float("nan")
-    norm = np.linalg.norm(h, axis=-1, keepdims=True)
+    V = np.stack([np.asarray(v, dtype=np.float64).reshape(-1) for v in vectors])  # [N, D]
+    norm = np.linalg.norm(V, axis=-1, keepdims=True)
     norm = np.where(norm < 1e-12, 1.0, norm)
-    hn = h / norm
-    sim = hn @ hn.T  # [N, N]
-    iu = np.triu_indices(n, k=1)
-    return float(sim[iu].mean())
+    Vn = V / norm
+    return Vn @ Vn.T  # [N, N]
 
 
 def attention_grid_figure(attn_heads: np.ndarray, title: str):
@@ -95,6 +92,30 @@ def attention_grid_figure(attn_heads: np.ndarray, title: str):
     return fig
 
 
+def layer_sim_page_figure(mats: dict, suptitle: str):
+    """One page: side-by-side N×N layer-similarity heatmaps for vid / act / hidden.
+
+    ``mats``: ordered dict ``{label: [N, N] array}``. Returns the Figure.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    items = list(mats.items())
+    fig, axes = plt.subplots(1, len(items), figsize=(5.0 * len(items), 4.6), squeeze=False)
+    for ax, (label, m) in zip(axes[0], items):
+        m = np.asarray(m, dtype=np.float32)
+        im = ax.imshow(m, cmap="viridis", vmin=-1.0, vmax=1.0, interpolation="nearest")
+        ax.set_title(f"{label}  (N={m.shape[0]})", fontsize=9)
+        ax.set_xlabel("layer")
+        ax.set_ylabel("layer")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    fig.suptitle(suptitle, fontsize=10)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    return fig
+
+
 # --------------------------------------------------------------------------------------
 # Capture context + installation
 # --------------------------------------------------------------------------------------
@@ -110,8 +131,10 @@ class CaptureContext:
         self.chunk_idx = -1
         self.timestep_idx = -1
 
-        # cossim: flat list of records (small, kept for the whole run)
-        self.cossim_records: list[dict] = []
+        # layer-similarity: per-CURRENT-chunk flattened token vectors per (timestep, layer).
+        # {(timestep, layer): {"vid": 1d, "act": 1d, "hid": 1d}}
+        self.layer_vecs: dict[tuple[int, int], dict[str, np.ndarray]] = {}
+        self._last_split = None  # (Lq, n_img, n_act) for logging
         # attention for the CURRENT chunk only: {(timestep, layer): np.ndarray[H,Lq,Lk]}
         self.attn_buffer: dict[tuple[int, int], np.ndarray] = {}
 
@@ -122,29 +145,25 @@ class CaptureContext:
         self.chunk_idx += 1
         self.timestep_idx = -1
         self.attn_buffer = {}
+        self.layer_vecs = {}
 
     def _new_timestep(self):
         self.timestep_idx += 1
 
     # -- recording -------------------------------------------------------------------
-    def _record_cossim(self, layer: int, x):
-        h = x[0].detach().float().cpu().numpy()  # [Lq, d]
+    def _record_layer_vecs(self, layer: int, x):
+        """Stash this layer's flattened token vectors (vid / act / full hidden) for the
+        cross-layer similarity matrices built at chunk flush time."""
+        h = x[0].detach().float()  # [Lq, d]
         lq = h.shape[0]
         n_act = self.n_act if 0 < self.n_act < lq else max(1, lq // 2)
         n_img = lq - n_act
-        self.cossim_records.append(
-            {
-                "chunk": self.chunk_idx,
-                "timestep": self.timestep_idx,
-                "layer": layer,
-                "Lq": lq,
-                "n_img": n_img,
-                "n_act": n_act,
-                "vid": mean_pairwise_cossim(h[:n_img]),
-                "act": mean_pairwise_cossim(h[n_img : n_img + n_act]),
-                "comb": mean_pairwise_cossim(h[: n_img + n_act]),
-            }
-        )
+        self._last_split = (lq, n_img, n_act)
+        self.layer_vecs[(self.timestep_idx, layer)] = {
+            "vid": h[:n_img].reshape(-1).to(torch.float16).cpu().numpy(),
+            "act": h[n_img : n_img + n_act].reshape(-1).to(torch.float16).cpu().numpy(),
+            "hid": h.reshape(-1).to(torch.float16).cpu().numpy(),  # full layer output
+        }
 
     def _record_attention(self, layer: int, causal: bool, q, k):
         qf = q[0].detach().float()  # [Lq, H, d]
@@ -187,7 +206,7 @@ class CaptureContext:
                 def hook(_mod, _inp, output):
                     if self.enabled and self.want_cossim:
                         x = output[0] if isinstance(output, (tuple, list)) else output
-                        self._record_cossim(layer_idx, x)
+                        self._record_layer_vecs(layer_idx, x)
 
                 return hook
 
@@ -261,50 +280,45 @@ class CaptureContext:
         self.attn_buffer = {}
         return n_written
 
-    def render_cossim(self, outdir: Path):
-        """Save cossim records (npz + csv) and per-group layer curves (one line per timestep)."""
-        outdir = Path(outdir)
-        outdir.mkdir(parents=True, exist_ok=True)
-        if not self.cossim_records:
-            return
+    def flush_chunk_layersim(self, outdir: Path):
+        """Build cross-layer similarity matrices for the current chunk and write them.
 
-        import csv
-
-        keys = ["chunk", "timestep", "layer", "Lq", "n_img", "n_act", "vid", "act", "comb"]
-        with open(outdir / "cossim.csv", "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=keys)
-            w.writeheader()
-            w.writerows(self.cossim_records)
-        np.savez(
-            outdir / "cossim.npz",
-            **{k: np.array([r[k] for r in self.cossim_records]) for k in keys},
-        )
-
-        self._plot_cossim_curves(outdir)
-
-    def _plot_cossim_curves(self, outdir: Path):
-        import matplotlib
-
-        matplotlib.use("Agg")
+        One PDF per chunk (``layer_similarity/chunk{c}.pdf``); one page per diffusion
+        timestep; each page has 3 N×N heatmaps (video / action / hidden). Raw matrices are
+        also saved to a per-chunk .npz.
+        """
+        if not self.layer_vecs:
+            return 0
+        from matplotlib.backends.backend_pdf import PdfPages
         import matplotlib.pyplot as plt
 
-        recs = self.cossim_records
-        layers = sorted({r["layer"] for r in recs})
-        timesteps = sorted({r["timestep"] for r in recs})
-        for group, label in (("vid", "video tokens"), ("act", "action tokens"), ("comb", "video+action")):
-            fig, ax = plt.subplots(figsize=(8, 5))
+        ls_dir = Path(outdir) / "layer_similarity"
+        ls_dir.mkdir(parents=True, exist_ok=True)
+
+        timesteps = sorted({t for (t, _l) in self.layer_vecs})
+        groups = [("vid", "video tokens"), ("act", "action tokens"), ("hid", "hidden states")]
+
+        npz_store: dict[str, np.ndarray] = {}
+        pdf_path = ls_dir / f"chunk{self.chunk_idx:03d}.pdf"
+        with PdfPages(str(pdf_path)) as pdf:
             for t in timesteps:
-                ys = []
-                for layer in layers:
-                    vals = [r[group] for r in recs if r["layer"] == layer and r["timestep"] == t]
-                    vals = [v for v in vals if not math.isnan(v)]
-                    ys.append(np.mean(vals) if vals else math.nan)
-                ax.plot(layers, ys, marker="o", markersize=3, label=f"timestep {t}")
-            ax.set_xlabel("layer")
-            ax.set_ylabel("mean pairwise cosine similarity")
-            ax.set_title(f"Token-token cossim across layers — {label}")
-            ax.legend(fontsize=7)
-            ax.grid(True, alpha=0.3)
-            fig.tight_layout()
-            fig.savefig(outdir / f"cossim_{group}.png", dpi=150)
-            plt.close(fig)
+                layers = sorted(layer for (tt, layer) in self.layer_vecs if tt == t)
+                mats = {}
+                for key, label in groups:
+                    vecs = [self.layer_vecs[(t, layer)][key] for layer in layers]
+                    mats[label] = layer_similarity_matrix(vecs)  # [N, N]
+                    npz_store[f"t{t}_{key}"] = mats[label]
+                lq, n_img, n_act = self._last_split or (0, 0, 0)
+                suptitle = (
+                    f"chunk {self.chunk_idx} | timestep {t} | N={len(layers)} layers | "
+                    f"Lq={lq} n_img={n_img} n_act={n_act}"
+                )
+                fig = layer_sim_page_figure(mats, suptitle)
+                pdf.savefig(fig)
+                plt.close(fig)
+        npz_store["layers"] = np.array(sorted({layer for (_t, layer) in self.layer_vecs}))
+        npz_store["timesteps"] = np.array(timesteps)
+        np.savez(ls_dir / f"chunk{self.chunk_idx:03d}.npz", **npz_store)
+
+        self.layer_vecs = {}
+        return 1
