@@ -124,10 +124,12 @@ def main() -> None:
         text_encoder_pretrained_path=args.text_encoder_pretrained_path,
         vae_pretrained_path=args.vae_pretrained_path,
         precision=args.precision,
-        layer_skip=None,
     )
-    model, num_action_chunks, _skipped, _num_layers = _build_model(model_args, device)
+    model, num_action_chunks = _build_model(model_args, device)
     policy = LiberoRLinfPolicy(model, device)
+
+    # Number of DiT layers (for the --layers filter).
+    _num_layers = len(model.action_head.model.blocks)
 
     # Install capture hooks.
     layers = _parse_layers(args.layers, _num_layers)

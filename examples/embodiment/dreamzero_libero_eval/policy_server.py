@@ -52,9 +52,6 @@ from omegaconf import OmegaConf, open_dict
 # RLinf model construction + inference.
 from rlinf.models.embodiment.dreamzero import get_model
 
-# Pure-Python DiT layer-skip helpers (no torch import; offline-testable).
-from layer_skip import apply_layer_skip
-
 # Reuse RLinf's exact LIBERO observation preprocessing so server-side conversion is
 # pixel-identical to training (rlinf/envs/libero/libero_env.py::_extract_image_and_state).
 from rlinf.envs.libero.utils import (
@@ -82,8 +79,6 @@ class ServerMetadata:
     action_space: str = "osc_pose"
     action_dim: int = 7
     num_action_chunks: int = 16
-    num_layers: int = 0  # total DiT blocks
-    layer_skip: str = ""  # comma-separated skipped block indices (recorded in results.json)
 
 
 class LiberoRLinfPolicy:
@@ -269,8 +264,28 @@ def _build_model(args: argparse.Namespace, device: torch.device):
             "safetensors and --ckpt-path will overlay on top of it."
         )
 
-    precision = str(model_cfg.get("precision", "bf16"))
-    torch_dtype = _PRECISION_TO_DTYPE.get(precision, torch.bfloat16)
+    # Precision policy — mirror RLinf's rollout EXACTLY by default.
+    # RLinf builds the rollout model with get_model(cfg) and NO torch_dtype
+    # (rlinf/workers/rollout/hf/huggingface_worker.py::init_worker), so the YAML
+    # `precision` field never triggers a cast: get_model's final
+    # `model.to(dtype=None)` is a no-op and the DiT keeps its constructed
+    # `model_dtype: float32` (only the frozen text/CLIP/VAE components keep their
+    # saved dtype). Forcing the whole model to bf16 here measurably degrades the
+    # flow-matching action accuracy (LIBERO-Spatial ~96% -> ~79%).
+    #   * default (no --precision)  -> torch_dtype=None : native, == RLinf eval (recommended)
+    #   * --precision fp32          -> cast everything to float32 (heaviest, definitely not bf16)
+    #   * --precision bf16          -> cast to bf16 (old behavior; for ablation only)
+    if args.precision is not None:
+        precision = str(args.precision).lower()
+        if precision not in _PRECISION_TO_DTYPE:
+            raise ValueError(
+                f"Unknown --precision {args.precision!r}; "
+                f"choose from {sorted(_PRECISION_TO_DTYPE)}."
+            )
+        torch_dtype = _PRECISION_TO_DTYPE[precision]
+    else:
+        precision = "native (no cast, matches RLinf rollout)"
+        torch_dtype = None
 
     logger.info(
         "Building DreamZero model (precision=%s, dtype=%s, model_path=%s)",
@@ -310,11 +325,8 @@ def _build_model(args: argparse.Namespace, device: torch.device):
     model.eval()
     model.to(device)
 
-    # Apply layer skip AFTER weights are loaded and the model is on-device.
-    skipped, num_layers = apply_layer_skip(model, args.layer_skip)
-
     num_action_chunks = int(model_cfg.get("num_action_chunks", 16))
-    return model, num_action_chunks, skipped, num_layers
+    return model, num_action_chunks
 
 
 def parse_args() -> argparse.Namespace:
@@ -351,7 +363,16 @@ def parse_args() -> argparse.Namespace:
         help="metadata.json with q99 normalization stats (MUST match SFT). Overrides the YAML value.",
     )
     parser.add_argument("--device", type=str, default="cuda:0", help="Inference device.")
-    parser.add_argument("--precision", type=str, default=None, help="Override model precision (e.g. bf16, fp32).")
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default=None,
+        help=(
+            "Force a model dtype cast. Omit (default) to keep the model's native dtype "
+            "(DiT float32) exactly like RLinf's rollout — recommended. 'fp32' casts "
+            "everything to float32; 'bf16' casts to bfloat16 (degrades accuracy, ablation only)."
+        ),
+    )
     parser.add_argument(
         "--skip-frozen-component-load",
         action="store_true",
@@ -359,16 +380,6 @@ def parse_args() -> argparse.Namespace:
             "Speed up startup in --model-path mode: skip reading the text/CLIP/VAE .pth files "
             "(~10GB+), since the full safetensors already contains and overwrites them. "
             "Produces an identical model; verify once by comparing an inference action chunk."
-        ),
-    )
-    parser.add_argument(
-        "--layer-skip",
-        type=str,
-        default=None,
-        help=(
-            "Skip these DiT transformer blocks (residual identity), e.g. '3,7,11' or '10-19' "
-            "(inclusive ranges). Indices in [0, num_layers). Empty/omitted = full model. "
-            "Recorded in results.json via server metadata."
         ),
     )
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Bind host.")
@@ -391,20 +402,14 @@ def main() -> None:
         args.config = os.path.join(here, "config", "dreamzero_5b_libero.yaml")
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    model, num_action_chunks, skipped, num_layers = _build_model(args, device)
+    model, num_action_chunks = _build_model(args, device)
 
-    metadata = ServerMetadata(
-        num_action_chunks=num_action_chunks,
-        num_layers=num_layers,
-        layer_skip=",".join(str(i) for i in skipped),
-    )
+    metadata = ServerMetadata(num_action_chunks=num_action_chunks)
     policy = LiberoRLinfPolicy(model, device)
     logger.info(
-        "Model ready. action_dim=%d num_action_chunks=%d num_layers=%d layer_skip=[%s]",
+        "Model ready. action_dim=%d num_action_chunks=%d",
         metadata.action_dim,
         num_action_chunks,
-        num_layers,
-        metadata.layer_skip,
     )
 
     server = PicklePolicyServer(policy, metadata, host=args.host, port=args.port)
