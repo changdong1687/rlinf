@@ -39,6 +39,46 @@ Extra args after `run_analysis.sh` go to `analyze_dreamzero.py`.
 
 > Volume: every chunk × 30 layers = one PDF each. Bound it with `--max-chunks` / `--layers`.
 
+## Layer skip (test success rate with some layers skipped)
+
+Skip layers on the **server**, then run the normal eval client. Two modes:
+
+- `--layer-skip-mode block` (default): skip the whole layer (all tokens).
+- `--layer-skip-mode video`: skip **only video tokens** (freeze them); action tokens still forward.
+
+**1) Start the server with skip** (extra flags pass through `run_server.sh`):
+
+```bash
+DREAMZERO_PATH=/path/to/DreamZero \
+bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
+    --model-path "$MODEL_PATH" \
+    --metadata-json-path "$MODEL_PATH/experiment_cfg/metadata.json" \
+    --tokenizer-path /path/to/umt5-xxl \
+    --layer-skip "10-19" --layer-skip-mode video \
+    --device cuda:0 --port 8000
+```
+
+`--layer-skip` accepts `3,7,11` or ranges `10-19` (indices in `[0,30)`). Log shows
+`LAYER SKIP active (mode=video): skipping ...`.
+
+**2) Run the client** (each skip config / mode → its own `--output-dir`):
+
+```bash
+LIBERO_ROOT=/path/to/LIBERO \
+bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
+  --benchmark-name libero_spatial --n-eval 50 --output-dir ./runs/skip_video_10-19
+```
+
+**3) Read success rate** (the skip config is saved in `results.json`):
+
+```bash
+python -c "import json; d=json.load(open('runs/skip_video_10-19/results.json')); \
+print(d['server_metadata']['layer_skip_mode'], d['server_metadata']['layer_skip'], d['mean_success_rate'])"
+```
+
+> Restart the server every time you change `--layer-skip` / `--layer-skip-mode`. Run a
+> no-skip baseline once (omit both flags) for reference.
+
 ## Test (no GPU/sim; needs numpy + matplotlib)
 
 ```bash
