@@ -39,7 +39,9 @@ import argparse
 import asyncio
 import dataclasses
 import logging
+import os
 import pickle
+import sys
 import traceback
 
 import numpy as np
@@ -48,6 +50,10 @@ import websockets
 import websockets.asyncio.server
 import websockets.frames
 from omegaconf import OmegaConf, open_dict
+
+# Ensure this script's own directory is importable so `import layer_skip` works regardless
+# of how the server is launched (e.g. cwd differs, or invoked from another package).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # RLinf model construction + inference.
 from rlinf.models.embodiment.dreamzero import get_model
