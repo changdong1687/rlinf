@@ -84,6 +84,7 @@ class ServerMetadata:
     num_action_chunks: int = 16
     num_layers: int = 0  # total DiT blocks
     layer_skip: str = ""  # comma-separated skipped block indices (recorded in results.json)
+    layer_skip_mode: str = "block"  # "block" (whole block) or "video" (only video tokens)
 
 
 class LiberoRLinfPolicy:
@@ -331,7 +332,9 @@ def _build_model(args: argparse.Namespace, device: torch.device):
     model.to(device)
 
     # Apply layer skip AFTER weights are loaded and the model is on-device.
-    skipped, num_layers = apply_layer_skip(model, args.layer_skip)
+    skipped, num_layers = apply_layer_skip(
+        model, args.layer_skip, mode=getattr(args, "layer_skip_mode", "block")
+    )
 
     num_action_chunks = int(model_cfg.get("num_action_chunks", 16))
     return model, num_action_chunks, skipped, num_layers
@@ -400,6 +403,17 @@ def parse_args() -> argparse.Namespace:
             "Recorded in results.json via server metadata."
         ),
     )
+    parser.add_argument(
+        "--layer-skip-mode",
+        type=str,
+        default="block",
+        choices=["block", "video"],
+        help=(
+            "What --layer-skip removes per layer: 'block' = the whole block (all tokens, "
+            "default); 'video' = only the video tokens (freeze their update, action tokens "
+            "still forwarded)."
+        ),
+    )
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Bind host.")
     parser.add_argument("--port", type=int, default=8000, help="Bind port.")
     # Optional pretrained component path overrides (else taken from YAML / HF cache).
@@ -426,14 +440,16 @@ def main() -> None:
         num_action_chunks=num_action_chunks,
         num_layers=num_layers,
         layer_skip=",".join(str(i) for i in skipped),
+        layer_skip_mode=args.layer_skip_mode,
     )
     policy = LiberoRLinfPolicy(model, device)
     logger.info(
-        "Model ready. action_dim=%d num_action_chunks=%d num_layers=%d layer_skip=[%s]",
+        "Model ready. action_dim=%d num_action_chunks=%d num_layers=%d layer_skip=[%s] mode=%s",
         metadata.action_dim,
         num_action_chunks,
         num_layers,
         metadata.layer_skip,
+        metadata.layer_skip_mode,
     )
 
     server = PicklePolicyServer(policy, metadata, host=args.host, port=args.port)
