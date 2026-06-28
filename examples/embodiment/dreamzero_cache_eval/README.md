@@ -70,39 +70,48 @@ Each step below: start a server in one terminal, run the client in another. Alwa
 **restart the server** when you change method or params (torch caches; the model is
 patched at load).
 
+> **Set the paths ONCE, each on its own line with `export` (common pitfall!).**
+> Do NOT write `CKPT_DIR=... \` as a line-continued *prefix* before `bash`: a prefix
+> assignment is not yet a shell variable when `${CKPT_DIR}` on the same command gets
+> expanded, so `--metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json"`
+> becomes `/experiment_cfg/metadata.json` → `FileNotFoundError: metadata_json_path
+> is not a file`. (Reordering `CKPT_DIR`/`DREAMZERO_PATH` does NOT help — both are
+> still prefix assignments.) `export` them first; subprocesses then inherit
+> `DREAMZERO_PATH` / `LIBERO_ROOT` too.
+
+```bash
+export CKPT_DIR=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000
+export DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero
+export TOKENIZER_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl
+export LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO
+```
+
 ### 0. Baseline (no cache) — the reference
 
 ```bash
-CKPT_DIR=/path/to/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000
-DREAMZERO_PATH=/path/to/DreamZero \
 bash run_baseline.sh \
-  --model-path "${CKPT_DIR}" \
-  --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-  --tokenizer-path /path/to/umt5-xxl \
+  --model-path "$CKPT_DIR" \
+  --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
+  --tokenizer-path "$TOKENIZER_PATH" \
   --stats-out ./runs/baseline/server_stats.json --device cuda:0 --port 8000
 ```
 Client (reuses the existing one):
 ```bash
-LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \ \
 bash ../dreamzero_libero_eval/run_client.sh \
   --benchmark-name libero_spatial --n-eval 50 --output-dir ./runs/baseline
 ```
 
 ### 1. TeaCache
 ```bash
-DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
-CKPT_DIR=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
-bash run_teacache.sh --model-path "${CKPT_DIR}" \
-  --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-  --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
+bash run_teacache.sh \
+  --model-path "$CKPT_DIR" \
+  --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
+  --tokenizer-path "$TOKENIZER_PATH" \
   --teacache-thresh 0.15 \
   --stats-out ./runs/teacache/server_stats.json --device cuda:0 --port 8000
-# client -> --output-dir ./runs/teacache
 ```
-
-Client (reuses the existing one):
+Client:
 ```bash
-LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \ \
 bash ../dreamzero_libero_eval/run_client.sh \
   --benchmark-name libero_spatial --n-eval 50 --output-dir ./runs/teacache
 ```
@@ -110,34 +119,33 @@ bash ../dreamzero_libero_eval/run_client.sh \
 ### 2. BAC — compute the schedule once, then serve
 ```bash
 # offline ACS (needs GPU + LIBERO):
-LIBERO_ROOT=/path/to/LIBERO DREAMZERO_PATH=/path/to/DreamZero \
 bash analysis/run_bac_schedule.sh \
-  --model-path "${CKPT_DIR}" \
-  --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-  --tokenizer-path /path/to/umt5-xxl \
+  --model-path "$CKPT_DIR" \
+  --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
+  --tokenizer-path "$TOKENIZER_PATH" \
   --task-id 0 --num-chunks 8 --num-caches 6 --num-bu-blocks 3 \
   --output ./runs/bac_schedule/schedule.json
 
 # serve with the schedule:
-DREAMZERO_PATH=/path/to/DreamZero \
-bash run_bac.sh --model-path "${CKPT_DIR}" \
-  --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-  --tokenizer-path /path/to/umt5-xxl \
+bash run_bac.sh \
+  --model-path "$CKPT_DIR" \
+  --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
+  --tokenizer-path "$TOKENIZER_PATH" \
   --bac-schedule ./runs/bac_schedule/schedule.json \
   --stats-out ./runs/bac/server_stats.json --device cuda:0 --port 8000
-# client -> --output-dir ./runs/bac
 ```
+Client: `bash ../dreamzero_libero_eval/run_client.sh --benchmark-name libero_spatial --n-eval 50 --output-dir ./runs/bac`
 
 ### 3. BWCache
 ```bash
-DREAMZERO_PATH=/path/to/DreamZero \
-bash run_bwcache.sh --model-path "${CKPT_DIR}" \
-  --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-  --tokenizer-path /path/to/umt5-xxl \
+bash run_bwcache.sh \
+  --model-path "$CKPT_DIR" \
+  --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
+  --tokenizer-path "$TOKENIZER_PATH" \
   --bw-thresh 0.05 --reuse-interval 3 --last-step 0.9 \
   --stats-out ./runs/bwcache/server_stats.json --device cuda:0 --port 8000
-# client -> --output-dir ./runs/bwcache
 ```
+Client: `bash ../dreamzero_libero_eval/run_client.sh --benchmark-name libero_spatial --n-eval 50 --output-dir ./runs/bwcache`
 
 ### 4. Compare
 ```bash
@@ -160,13 +168,14 @@ LIBERO client, stops the server, and finally recommends a config by
 **success-first** (largest speedup whose success rate is within `--tolerance` of the
 baseline). It runs on the GPU machine (drives the real server + client).
 
+Reuses the `export`ed `CKPT_DIR` / `DREAMZERO_PATH` / `TOKENIZER_PATH` / `LIBERO_ROOT`
+from the usage section above (so `$CKPT_DIR` inside `--server-args` expands correctly):
+
 ```bash
-CKPT_DIR=/path/to/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000
-DREAMZERO_PATH=/path/to/DreamZero LIBERO_ROOT=/path/to/LIBERO \
 bash run_calibrate.sh \
   --method teacache \
   --sweep teacache-thresh=0.08,0.12,0.16,0.22,0.3 \
-  --server-args "--model-path ${CKPT_DIR} --metadata-json-path ${CKPT_DIR}/experiment_cfg/metadata.json --tokenizer-path /path/to/umt5-xxl --device cuda:0" \
+  --server-args "--model-path $CKPT_DIR --metadata-json-path $CKPT_DIR/experiment_cfg/metadata.json --tokenizer-path $TOKENIZER_PATH --device cuda:0" \
   --client-args "--benchmark-name libero_spatial --task-ids 0 1 2 --n-eval 5" \
   --run-baseline --tolerance 0.02 --out-dir ./runs/calib_teacache
 ```
