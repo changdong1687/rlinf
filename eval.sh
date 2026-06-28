@@ -4,11 +4,11 @@
 
 # DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
 # bash examples/embodiment/dreamzero_libero_eval/run_server.sh \
-#     --model-path "${CKPT_DIR}" \
-#     --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-#     --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
-#     --layer-skip 6,8,10,12,14,16,18,20,22,24,26,28,30,32,34 \
-#     --device cuda:0 --port 8000
+    --model-path "${CKPT_DIR}" \
+    --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
+    --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
+    --layer-skip 6,8,10,12,14,16,18,20,22,24,26,28,30,32,34 \
+    --device cuda:0 --port 8000
 
 
 # 1. 记录开始时的系统时间（单位：秒）
@@ -51,4 +51,4 @@ bash examples/embodiment/dreamzero_libero_eval/run_client.sh \
     --task-ids 1 \
     --n-eval 50 \
     --save-video \
-    --output-dir "./runs/libero_spatial_smoke/
+    --output-dir "./runs/libero_spatial_smoke/"

@@ -83,20 +83,28 @@ bash run_baseline.sh \
 ```
 Client (reuses the existing one):
 ```bash
-LIBERO_ROOT=/path/to/LIBERO \
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \ \
 bash ../dreamzero_libero_eval/run_client.sh \
   --benchmark-name libero_spatial --n-eval 50 --output-dir ./runs/baseline
 ```
 
 ### 1. TeaCache
 ```bash
-DREAMZERO_PATH=/path/to/DreamZero \
+DREAMZERO_PATH=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero \
+CKPT_DIR=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000 \
 bash run_teacache.sh --model-path "${CKPT_DIR}" \
   --metadata-json-path "${CKPT_DIR}/experiment_cfg/metadata.json" \
-  --tokenizer-path /path/to/umt5-xxl \
+  --tokenizer-path /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/ckpts/umt5-xxl \
   --teacache-thresh 0.15 \
   --stats-out ./runs/teacache/server_stats.json --device cuda:0 --port 8000
 # client -> --output-dir ./runs/teacache
+```
+
+Client (reuses the existing one):
+```bash
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO \ \
+bash ../dreamzero_libero_eval/run_client.sh \
+  --benchmark-name libero_spatial --n-eval 50 --output-dir ./runs/teacache
 ```
 
 ### 2. BAC — compute the schedule once, then serve
