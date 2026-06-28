@@ -213,7 +213,16 @@ def add_common_model_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ckpt-path", type=str, default=None, help="RLinf full_weights.pt state dict to overlay.")
     parser.add_argument("--metadata-json-path", type=str, default=None, help="q99 normalization stats (MUST match SFT).")
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--precision", type=str, default=None, help="Force dtype cast; omit for native (matches RLinf rollout).")
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default="bf16",
+        help=(
+            "Model dtype: 'bf16' (default; faster/less memory), 'fp32', 'fp16', or "
+            "'native' (no cast -> DiT stays float32 = RLinf rollout = best accuracy). "
+            "NOTE: bf16 trades accuracy for speed (upstream LIBERO ~96.7 -> ~79)."
+        ),
+    )
     parser.add_argument("--skip-frozen-component-load", action="store_true")
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
@@ -228,15 +237,17 @@ def add_common_model_args(parser: argparse.ArgumentParser) -> None:
 def build_model(args: argparse.Namespace, device: torch.device):
     """Load actor.model config, build the DreamZero model, overlay the checkpoint.
 
-    Returns ``(model, num_action_chunks)``. Mirrors the dreamzero_libero_eval
-    server's precision policy: default (no --precision) keeps the native dtype,
-    exactly like RLinf's rollout (casting to bf16 measurably degrades accuracy).
+    Returns ``(model, num_action_chunks)``. Precision: ``--precision`` defaults to
+    ``bf16`` (cast the whole model); pass ``--precision native`` to keep the
+    constructed dtype (DiT float32), which matches RLinf's rollout and gives the
+    best LIBERO accuracy (bf16 measurably degrades it; see the --precision help).
     """
     cfg = OmegaConf.load(args.config)
     model_cfg = cfg.actor.model
+    prec = (args.precision or "native").lower()
     with open_dict(model_cfg):
-        if args.precision is not None:
-            model_cfg.precision = args.precision
+        if prec not in ("native", "none"):
+            model_cfg.precision = prec
         if args.metadata_json_path is not None:
             model_cfg.metadata_json_path = args.metadata_json_path
         if args.tokenizer_path is not None:
@@ -251,13 +262,21 @@ def build_model(args: argparse.Namespace, device: torch.device):
             model_cfg.vae_pretrained_path = args.vae_pretrained_path
         model_cfg.model_path = args.model_path if args.model_path else None
 
-    if args.precision is not None:
-        precision = str(args.precision).lower()
-        if precision not in _PRECISION_TO_DTYPE:
-            raise ValueError(f"Unknown --precision {args.precision!r}; choose from {sorted(_PRECISION_TO_DTYPE)}.")
-        torch_dtype = _PRECISION_TO_DTYPE[precision]
-    else:
+    # Default is bf16 (cast the whole model). Pass --precision native to keep the
+    # model's constructed dtype (DiT float32), which matches RLinf's rollout.
+    if prec in ("native", "none"):
         torch_dtype = None
+        logger.info("precision=native: no cast (DiT stays float32, matches RLinf rollout / best accuracy)")
+    elif prec in _PRECISION_TO_DTYPE:
+        torch_dtype = _PRECISION_TO_DTYPE[prec]
+        if torch_dtype == torch.bfloat16:
+            logger.warning(
+                "precision=bf16: faster / less memory, but the upstream DreamZero eval "
+                "reports LIBERO-Spatial success drops from ~96.7%% to ~79%% vs native. "
+                "Use --precision native for the accurate reference."
+            )
+    else:
+        raise ValueError(f"Unknown --precision {args.precision!r}; choose bf16 / fp32 / fp16 / native.")
 
     logger.info("Building DreamZero model (dtype=%s, model_path=%s)", torch_dtype, model_cfg.model_path)
     skip_components = bool(args.skip_frozen_component_load) and bool(args.model_path)

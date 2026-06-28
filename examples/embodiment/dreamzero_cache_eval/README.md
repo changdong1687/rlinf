@@ -201,6 +201,15 @@ bash run_calibrate.sh \
   `--metric` (cosine default) in the schedule script.
 - **BWCache**: `--bw-thresh`, `--reuse-interval`, `--last-step`.
 
+### Precision (`--precision`)
+
+Default is **`bf16`** (faster, less memory). Pass **`--precision native`** to keep the
+DiT in float32 — this matches RLinf's rollout and gives the best accuracy. ⚠️ The
+upstream DreamZero eval reports LIBERO-Spatial success drops from **~96.7% (native) to
+~79% (bf16)**, so for a meaningful baseline-vs-cache comparison run **all** servers
+with the *same* precision; prefer `--precision native` when measuring success rate, and
+use `bf16` only if you are memory/throughput-bound (and compare against a bf16 baseline).
+
 Start conservative (small skip) and increase; success drops sharply if too much is
 skipped, especially the final refinement steps.
 
