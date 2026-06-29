@@ -1,0 +1,102 @@
+Using Python at /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/bin/python
+LIBERO_ROOT=/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/LIBERO
+[robosuite WARNING] No private macro file found! (macros.py:53)
+[robosuite WARNING] It is recommended to use a private macro file (macros.py:54)
+[robosuite WARNING] To setup, run: python /inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/robosuite/scripts/setup_macros.py (macros.py:55)
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+Users of this version of Gym should be able to simply replace 'import gym' with 'import gymnasium as gym' in the vast majority of cases.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+[info] using task orders [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+[eval][start] benchmark=libero_spatial task_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] n_eval=50 max_steps=480 open_loop_horizon=None server_metadata={'embodiment': 'libero_sim', 'action_space': 'osc_pose', 'action_dim': 7, 'num_action_chunks': 16, 'num_layers': 0, 'cache_method': 'bwcache', 'cache_config': 'thresh=0.05,interval=3,last_step=0.9'}
+Tasks:   0%|          | 0/10 [00:00<?, ?task/s]
+Task 0 Episodes:   0%|          | 0/50 [00:00<?, ?ep/s][A
+
+Task 0 Ep 0:   0%|          | 0/480 [00:00<?, ?step/s][A[A
+                                                       [ATasks:   0%|          | 0/10 [00:03<?, ?task/s, task_id=0, task_name=pick_up_the_black_bowl_between_t]
+Traceback (most recent call last):
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_libero_eval/libero_eval_client.py", line 367, in <module>
+    main()
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_libero_eval/libero_eval_client.py", line 321, in main
+    action = client.infer(obs, task.language)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_libero_eval/libero_eval_client.py", line 129, in infer
+    result = self.client.infer(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_libero_eval/libero_eval_client.py", line 74, in infer
+    raise RuntimeError(f"Error in inference server:\n{response}")
+RuntimeError: Error in inference server:
+Traceback (most recent call last):
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_cache_eval/server_base.py", line 165, in _handler
+    action = await asyncio.to_thread(self._policy.infer, payload)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/.local/share/uv/python/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/asyncio/threads.py", line 25, in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/.local/share/uv/python/cpython-3.11.14-linux-x86_64-gnu/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_cache_eval/server_base.py", line 125, in infer
+    actions, _ = self._model.predict_action_batch(env_obs, mode="eval")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_cache_eval/block_cache.py", line 189, in predict_action_batch
+    out = orig_predict(*a, **k)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/rlinf/models/embodiment/dreamzero/dreamzero_policy.py", line 279, in predict_action_batch
+    model_pred = self.lazy_joint_video_action_causal(normalized_input)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/groot/vla/model/dreamzero/base_vla.py", line 187, in lazy_joint_video_action_causal
+    action_head_outputs = self.action_head.lazy_joint_video_action(backbone_outputs, action_inputs, latent_video=latent_video)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/groot/vla/model/dreamzero/action_head/wan_flow_matching_action_tf.py", line 1256, in lazy_joint_video_action
+    predictions = self._run_diffusion_steps(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/groot/vla/model/dreamzero/action_head/wan_flow_matching_action_tf.py", line 885, in _run_diffusion_steps
+    obs_noise_pred, action_noise_pred, updated_kv_caches = self.model(
+                                                           ^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_cache_eval/block_cache.py", line 174, in model_forward
+    return orig_model_forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/groot/vla/model/dreamzero/modules/wan_video_dit_action_casual_chunk.py", line 2170, in forward
+    return self._forward_inference(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/groot/vla/model/dreamzero/modules/wan_video_dit_action_casual_chunk.py", line 1972, in _forward_inference
+    x_video, action_noise_pred, updated_kv_caches = self._forward_blocks(
+                                                    ^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/dreamzero/groot/vla/model/dreamzero/modules/wan_video_dit_action_casual_chunk.py", line 1798, in _forward_blocks
+    x, updated_kv_cache = block(
+                          ^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_cache_eval/block_cache.py", line 136, in _forward
+    rel = _rel_l1(delta, prev) if prev is not None else None
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/examples/embodiment/dreamzero_cache_eval/block_cache.py", line 53, in _rel_l1
+    diff = cur - prev
+           ~~~~^~~~~~
+RuntimeError: The size of tensor a (117) must match the size of tensor b (50) at non-singleton dimension 1
+
+
+
+                                                      [A[AException ignored in: <function MjRenderContext.__del__ at 0x7fa3af2296c0>
+Traceback (most recent call last):
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/robosuite/utils/binding_utils.py", line 199, in __del__
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/robosuite/renderers/context/egl_context.py", line 149, in free
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/OpenGL/error.py", line 230, in glCheckError
+OpenGL.raw.EGL._errors.EGLError: <exception str() failed>
+Exception ignored in: <function EGLGLContext.__del__ at 0x7fa3af229580>
+Traceback (most recent call last):
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/robosuite/renderers/context/egl_context.py", line 155, in __del__
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/robosuite/renderers/context/egl_context.py", line 149, in free
+  File "/inspire/hdd/project/realtimedecisionmaking/chentao-25011/surd/codes/RLinf/.venv/lib/python3.11/site-packages/OpenGL/error.py", line 230, in glCheckError
+OpenGL.raw.EGL._errors.EGLError: <exception str() failed>
