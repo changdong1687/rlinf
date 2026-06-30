@@ -116,24 +116,39 @@ class BlockCacheController:
         self._fwd_count += 1
 
 
+def _seq_len(x) -> int | None:
+    """Token/sequence length of a block input ``[B, Lq, d]`` (None if not applicable)."""
+    shape = getattr(x, "shape", None)
+    if shape is not None and len(shape) >= 2:
+        return int(shape[1])
+    return None
+
+
 def _make_block_forward(orig_forward, block_id: int, ctrl: BlockCacheController):
     def _forward(*args, **kwargs):
         x_in = kwargs.get("x", args[0] if args else None)
         kv_in = kwargs.get("kv_cache", None)
-        key = (block_id, ctrl.branch)
+        # DreamZero's AR inference calls the DiT with DIFFERENT sequence lengths
+        # (e.g. a short single-frame / warmup pass of length frame_seqlen vs the full
+        # denoise pass of image+action tokens). Keying the residual cache by sequence
+        # length keeps each pass-shape separate, so we never subtract/add tensors of
+        # mismatched length — reuse still works across same-shaped denoise steps.
+        key = (block_id, ctrl.branch, _seq_len(x_in))
 
         compute = ctrl.policy.should_compute(block_id, ctrl.step, ctrl.branch)
-        if (not compute) and key in ctrl.cache:
+        cached = ctrl.cache.get(key)
+        if (not compute) and cached is not None and getattr(cached, "shape", None) == getattr(x_in, "shape", None):
             if ctrl.stats is not None:
                 ctrl.stats.mark_block(False)
-            return x_in + ctrl.cache[key], kv_in
+            return x_in + cached, kv_in
 
         out = orig_forward(*args, **kwargs)
         x_out, rest = (out[0], out[1:]) if isinstance(out, tuple) else (out, ())
         delta = _detach(x_out - x_in)
 
         prev = ctrl.prev_residual.get(key)
-        rel = _rel_l1(delta, prev) if prev is not None else None
+        same_shape = prev is not None and getattr(prev, "shape", None) == getattr(delta, "shape", None)
+        rel = _rel_l1(delta, prev) if same_shape else None
         ctrl.policy.note(block_id, ctrl.step, ctrl.branch, rel)
 
         ctrl.cache[key] = delta

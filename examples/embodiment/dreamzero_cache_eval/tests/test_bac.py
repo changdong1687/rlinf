@@ -185,7 +185,8 @@ def test_block_cache_separates_cond_and_uncond():
     model.predict_action_batch(0.0)
     ctrl = model._block_cache
     # both CFG branches got their own cached residuals for each block.
-    assert set(ctrl.cache.keys()) == {(0, 0), (0, 1), (1, 0), (1, 1)}
+    # Keys are (block_id, branch, seq_len); ignore seq_len here.
+    assert {(b, br) for (b, br, *_rest) in ctrl.cache.keys()} == {(0, 0), (0, 1), (1, 0), (1, 1)}
 
 
 def test_block_cache_resets_between_chunks():
