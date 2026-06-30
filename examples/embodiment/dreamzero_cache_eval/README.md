@@ -117,16 +117,34 @@ bash ../dreamzero_libero_eval/run_client.sh \
 ```
 
 ### 2. BAC — compute the schedule once, then serve
+
+Unlike BWCache (online/adaptive), BAC is **offline-calibrated**: you first compute a
+fixed per-block "update schedule" from real activations, then serve with it. Two steps:
+
+**Step A — offline ACS (compute the schedule).** Builds the model + one LIBERO task,
+runs a few chunks, records how much each DiT block changes across the 16 diffusion
+steps, then for each block picks which steps to recompute (the rest are reused). Writes
+`schedule.json`. Run it **once**; needs GPU + LIBERO.
+
 ```bash
-# offline ACS (needs GPU + LIBERO):
 bash analysis/run_bac_schedule.sh \
   --model-path "$CKPT_DIR" \
   --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
   --tokenizer-path "$TOKENIZER_PATH" \
   --task-id 0 --num-chunks 8 --num-caches 6 --num-bu-blocks 3 \
   --output ./runs/bac_schedule/schedule.json
+```
 
-# serve with the schedule:
+| Flag | Meaning | Effect |
+| --- | --- | --- |
+| `--num-caches` | **update steps per block, out of 16** (rest are reused) | **main speed/quality knob**: lower = more reuse = faster, lower fidelity |
+| `--num-bu-blocks` | how many highest-error blocks get "Bubbling Union" (extra protection) | larger = safer (protects sensitive blocks), slightly less speedup |
+| `--num-chunks` | policy predictions captured for the statistics | larger = more robust schedule, slower calibration |
+| `--task-id` | which LIBERO task to capture activations from | use a representative task |
+
+**Step B — serve with the schedule.**
+
+```bash
 bash run_bac.sh \
   --model-path "$CKPT_DIR" \
   --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
@@ -190,6 +208,71 @@ bash run_calibrate.sh \
 - Outputs `calibrate_results.{json,csv}` and prints the table with the recommended
   row marked. Use a small `--client-args` (few tasks/episodes) for the sweep, then
   run the chosen config at full `--n-eval 50` for the final number.
+
+### BWCache threshold sweep
+
+Sweep the reuse threshold `bw-thresh` (the main knob; `reuse-interval` / `last-step` /
+`bw-warmup-steps` stay fixed in `--server-args`). Baseline and cache both default to
+**bf16** here, so the comparison is fair (note: bf16 absolute success is ~79, not the
+fp32 ~96.7 — judge BWCache by its *drop vs the bf16 baseline*).
+
+```bash
+bash run_calibrate.sh \
+  --method bwcache \
+  --sweep bw-thresh=0.03,0.05,0.08,0.12 \
+  --server-args "--model-path $CKPT_DIR --metadata-json-path $CKPT_DIR/experiment_cfg/metadata.json --tokenizer-path $TOKENIZER_PATH --device cuda:0 --reuse-interval 3 --last-step 0.9 --bw-warmup-steps 2" \
+  --client-args "--benchmark-name libero_spatial --task-ids 0 1 2 --n-eval 5" \
+  --run-baseline --tolerance 0.03 --out-dir ./runs/calib_bwcache
+```
+
+Pick the `bw-thresh` whose success barely drops vs baseline but gives the largest
+`speedup` (the table marks the `success-first` recommendation). Then, with that
+threshold fixed, optionally tune the reuse interval:
+
+```bash
+bash run_calibrate.sh \
+  --method bwcache \
+  --sweep reuse-interval=2,3,4 \
+  --server-args "--model-path $CKPT_DIR --metadata-json-path $CKPT_DIR/experiment_cfg/metadata.json --tokenizer-path $TOKENIZER_PATH --device cuda:0 --bw-thresh <chosen> --last-step 0.9 --bw-warmup-steps 2" \
+  --client-args "--benchmark-name libero_spatial --task-ids 0 1 2 --n-eval 5" \
+  --run-baseline --tolerance 0.03 --out-dir ./runs/calib_bwcache_interval
+```
+
+Finally re-run the chosen config at full scale (`--n-eval 50`, all tasks) to confirm
+the success/speedup, and check `server_stats.json` for the block skip ratio.
+
+### BAC schedule sweep
+
+BAC's speed/quality knob is `--num-caches` (update steps per block, of 16). You sweep it
+by **pre-generating one schedule per value**, then letting `calibrate.py` sweep over the
+schedule files. First generate, e.g., schedules with 4 / 6 / 8 update steps:
+
+```bash
+for NC in 4 6 8; do
+  bash analysis/run_bac_schedule.sh \
+    --model-path "$CKPT_DIR" \
+    --metadata-json-path "$CKPT_DIR/experiment_cfg/metadata.json" \
+    --tokenizer-path "$TOKENIZER_PATH" \
+    --task-id 0 --num-chunks 8 --num-caches "$NC" --num-bu-blocks 3 \
+    --output ./runs/bac_sched/sched_nc${NC}.json
+done
+```
+
+Then sweep over the schedule files (fewer caches = more reuse = faster):
+
+```bash
+bash run_calibrate.sh \
+  --method bac \
+  --sweep bac-schedule=./runs/bac_sched/sched_nc4.json,./runs/bac_sched/sched_nc6.json,./runs/bac_sched/sched_nc8.json \
+  --server-args "--model-path $CKPT_DIR --metadata-json-path $CKPT_DIR/experiment_cfg/metadata.json --tokenizer-path $TOKENIZER_PATH --device cuda:0" \
+  --client-args "--benchmark-name libero_spatial --task-ids 0 1 2 --n-eval 5" \
+  --run-baseline --tolerance 0.03 --out-dir ./runs/calib_bac
+```
+
+The recommended row (success-first) is the schedule with the largest speedup whose
+success stays within `--tolerance` of the bf16 baseline. Re-run that schedule's
+`run_bac.sh` at full `--n-eval 50` to confirm. (`--num-bu-blocks` can be tuned the same
+way: generate schedules varying it and sweep those files.)
 
 ## Tuning knobs
 
